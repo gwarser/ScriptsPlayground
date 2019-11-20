@@ -25,7 +25,20 @@ import argparse
 ap = argparse.ArgumentParser()
 ap.add_argument('--dir', nargs='+', help='Set directories', default=None)
 ap.add_argument('--commit', help='Enable commit mode', action='store_true', default=False)
+ap.add_argument('--nosort', help='Do not perform sorting', action='store_true', default=False)
+ap.add_argument('--nodedupe', help='Do not perform decuplication', action='store_true', default=False)
+ap.add_argument('--nostrip', help='Do not remove empty lines', action='store_true', default=False)
 arg = ap.parse_args()
+
+if arg.nosort:
+    fop_sorted = lambda *args, **kwargs: list(*args)
+else:
+    fop_sorted = sorted
+
+if arg.nodedupe:
+    fop_set = list
+else:
+    fop_set = set
 
 # Check the version of Python for language compatibility and subprocess.check_output()
 MAJORREQUIRED = 3
@@ -206,7 +219,7 @@ def fopsort (filename):
                     elif re.sub(DOMAINPATTERN, "", uncombinedFilters[i]) == re.sub(DOMAINPATTERN, "", uncombinedFilters[i+1]):
                         # identical filters. Try to combine them...
                         newDomains = "{d1}{sep}{d2}".format(d1=domain1str, sep=domainseparator, d2=domain2str)
-                        newDomains = domainseparator.join(sorted(set(newDomains.split(domainseparator)), key = lambda domain: domain.strip("~")))
+                        newDomains = domainseparator.join(fop_sorted(fop_set(newDomains.split(domainseparator)), key = lambda domain: domain.strip("~")))
                         if (domain1str.count("~") != domain1str.count(domainseparator) + 1) != (domain2str.count("~") != domain2str.count(domainseparator) + 1):
                             # do not combine rules containing included domains with rules containing only excluded domains
                             combinedFilters.append(uncombinedFilters[i])
@@ -223,10 +236,10 @@ def fopsort (filename):
         # Writes the filter lines to the file
         def writefilters():
             if elementlines > filterlines:
-                uncombinedFilters = sorted(set(section), key = lambda rule: re.sub(ELEMENTDOMAINPATTERN, "", rule))
+                uncombinedFilters = fop_sorted(fop_set(section), key = lambda rule: re.sub(ELEMENTDOMAINPATTERN, "", rule))
                 outputfile.write("{filters}\n".format(filters = "\n".join(combinefilters(uncombinedFilters, ELEMENTDOMAINPATTERN, ","))))
             else:
-                uncombinedFilters = sorted(set(section), key = str.lower)
+                uncombinedFilters = fop_sorted(fop_set(section), key = str.lower)
                 outputfile.write("{filters}\n".format(filters = "\n".join(combinefilters(uncombinedFilters, FILTERDOMAINPATTERN, "|"))))
 
         for line in inputfile:
@@ -266,6 +279,8 @@ def fopsort (filename):
                         line = filtertidy(line)
                     # Add the filter to the section
                     section.append(line)
+            elif arg.nostrip:
+                section.append(line)
         # At the end of the file, sort and save any remaining filters
         if section:
             writefilters()
@@ -306,10 +321,10 @@ def filtertidy (filterin):
                 print("Warning: The option \"{option}\" used on the filter \"{problemfilter}\" is not recognised by FOP".format(option = option, problemfilter = filterin))
         # Sort all options other than domain alphabetically
         # For identical options, the inverse always follows the non-inverse option ($image,~image instead of $~image,image)
-        optionlist = sorted(set(filter(lambda option: option not in removeentries, optionlist)), key = lambda option: (option[1:] + "~") if option[0] == "~" else option)
+        optionlist = fop_sorted(fop_set(filter(lambda option: option not in removeentries, optionlist)), key = lambda option: (option[1:] + "~") if option[0] == "~" else option)
         # If applicable, sort domain restrictions and append them to the list of options
         if domainlist:
-            optionlist.append("domain={domainlist}".format(domainlist = "|".join(sorted(set(domainlist), key = lambda domain: domain.strip("~")))))
+            optionlist.append("domain={domainlist}".format(domainlist = "|".join(fop_sorted(fop_set(domainlist), key = lambda domain: domain.strip("~")))))
 
         # Return the full filter
         return "{filtertext}${options}".format(filtertext = filtertext, options = ",".join(optionlist))
@@ -319,7 +334,7 @@ def elementtidy (domains, separator, selector):
     tags and make the relevant sections of the rule lower case."""
     # Order domain names alphabetically, ignoring exceptions
     if "," in domains:
-        domains = ",".join(sorted(set(domains.split(",")), key = lambda domain: domain.strip("~")))
+        domains = ",".join(fop_sorted(fop_set(domains.split(",")), key = lambda domain: domain.strip("~")))
     # Mark the beginning and end of the selector with "@"
     selector = "@{selector}@".format(selector = selector)
     each = re.finditer
